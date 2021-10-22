@@ -1,4 +1,4 @@
-mod matix;
+mod matrix;
 
 #[cfg(test)]
 mod tests {

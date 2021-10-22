@@ -1,4 +1,4 @@
-use std::{fmt, iter::FromIterator};
+use std::{fmt, io::Read, iter::FromIterator};
 
 #[derive(PartialEq, Eq)]
 pub struct Matrix {
@@ -51,6 +51,7 @@ impl Matrix {
     pub fn swap_rows(&mut self, row1: usize, row2: usize) {
         assert!(row1 < self.rows);
         assert!(row2 < self.rows);
+
         todo!()
     }
 }
