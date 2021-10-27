@@ -1,9 +1,12 @@
 mod matrix;
+mod rs;
 
 #[cfg(test)]
 mod tests {
+    use crate::rs::reedsolo;
+
     #[test]
     fn it_works() {
-        assert_eq!(2 + 2, 4);
+        let reedsolo = reedsolo::new();
     }
 }
