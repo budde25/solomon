@@ -1,6 +1,6 @@
-pub struct reedsolo {}
+pub struct ReedSolo {}
 
-impl reedsolo {
+impl ReedSolo {
     pub fn new() -> Self {
         todo!()
     }

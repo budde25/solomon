@@ -1,7 +1,7 @@
-use std::{
-    fmt::{self},
-    iter::FromIterator,
-};
+use crate::galois::gal_multiply;
+
+use super::galois;
+use std::fmt::{self};
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum MatrixError {
@@ -9,6 +9,7 @@ pub enum MatrixError {
     InvalidColSize,
     InvalidSize,
     InvalidSliceLength,
+    Singular,
 }
 
 #[derive(PartialEq, Eq)]
@@ -74,11 +75,83 @@ impl Matrix {
         Ok(res)
     }
 
-    pub fn inverse(&self) -> Self {
-        assert!(self.is_square());
-        let res = Matrix::new(self.rows, self.cols).unwrap();
+    pub fn sub_matrix(
+        &self,
+        rmin: usize,
+        rmax: usize,
+        cmin: usize,
+        cmax: usize,
+    ) -> Result<Self, MatrixError> {
+        let mut res = Self::new(rmax - rmin, cmax - cmin)?;
+        for r in rmin..rmax {
+            for c in cmin..cmax {
+                res[r - rmin][c - cmin] = self[r][c];
+            }
+        }
 
-        todo!();
+        Ok(res)
+    }
+
+    /// Returns the inverse of the matrix
+    pub fn inverse(&self) -> Result<Self, MatrixError> {
+        if !self.is_square() {
+            return Err(MatrixError::InvalidSize);
+        }
+        let size = self.rows;
+
+        let work = Self::new_identity(size)?;
+        let mut work = self.augment(&work)?;
+
+        work.gaussian_elimnation()?;
+
+        work.sub_matrix(0, size, size, size * 2)
+    }
+
+    pub fn gaussian_elimnation(&mut self) -> Result<(), MatrixError> {
+        // clear out the part below the main diagonal and scale to be 1
+        for r in 0..self.rows {
+            if self[r][r] == 0 {
+                for rb in (r + 1)..self.rows {
+                    if self[rb][r] != 0 {
+                        self.swap_rows(r, rb);
+                        break;
+                    }
+                }
+            }
+
+            if self[r][r] == 0 {
+                return Err(MatrixError::Singular);
+            }
+
+            if self[r][r] != 0 {
+                let scale = galois::gal_divide(1, self[r][r]);
+                for c in 0..self.cols {
+                    self[r][c] = galois::gal_multiply(self[r][c], scale);
+                }
+            }
+
+            for rb in (r + 1)..self.rows {
+                if self[rb][r] != 0 {
+                    let scale = self[rb][r];
+                    for c in 0..self.cols {
+                        self[rb][c] ^= galois::gal_multiply(self[r][c], scale);
+                    }
+                }
+            }
+        }
+
+        for d in 0..self.rows {
+            for ra in 0..d {
+                if self[ra][d] != 0 {
+                    let scale = self[ra][d];
+                    for c in 0..self.cols {
+                        self[ra][c] ^= gal_multiply(scale, self[d][c]);
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     // Returns true if the matrix are the same size
@@ -104,6 +177,16 @@ impl Matrix {
             self.data[index2] = v1;
         }
     }
+}
+
+pub fn vandermonde(rows: usize, cols: usize) -> Result<Matrix, MatrixError> {
+    let mut res = Matrix::new(rows, cols)?;
+    for r in 0..rows {
+        for c in 0..cols {
+            res[r][c] = galois::gal_exp(r as u8, c)
+        }
+    }
+    Ok(res)
 }
 
 impl std::ops::Index<usize> for Matrix {
@@ -136,9 +219,11 @@ impl std::ops::Mul for Matrix {
         let mut res = Matrix::new(self.rows, rhs.cols).unwrap();
         for i in 0..self.rows {
             for j in 0..rhs.cols {
+                let mut value: u8 = 0;
                 for k in 0..self.cols {
-                    res[i][j] += self[i][k] * rhs[k][j];
+                    value ^= galois::gal_multiply(self[i][k], rhs[k][j]);
                 }
+                res[i][j] = value;
             }
         }
         res
@@ -219,9 +304,9 @@ mod tests {
 
     #[test]
     fn test_multiply() {
-        let mat1 = Matrix::from_slice(2, 3, &[1, 2, 3, 4, 5, 6]).unwrap();
-        let mat2 = Matrix::from_slice(3, 2, &[7, 8, 9, 10, 11, 12]).unwrap();
-        let product = Matrix::from_slice(2, 2, &[58, 64, 139, 154]).unwrap();
+        let mat1 = Matrix::from_slice(2, 2, &[1, 2, 3, 4]).unwrap();
+        let mat2 = Matrix::from_slice(2, 2, &[5, 6, 7, 8]).unwrap();
+        let product = Matrix::from_slice(2, 2, &[11, 22, 19, 42]).unwrap();
         let res = mat1 * mat2;
         assert_eq!(res.rows, 2);
         assert_eq!(res.cols, 2);
@@ -234,5 +319,21 @@ mod tests {
         let mat2 = Matrix::from_slice(3, 1, &[4, 3, 1]).unwrap();
         let res = Matrix::from_slice(3, 4, &[1, 3, 2, 4, 2, 0, 1, 3, 5, 2, 2, 1]).unwrap();
         assert_eq!(mat1.augment(&mat2).unwrap(), res);
+    }
+
+    #[test]
+    fn test_sub_matix() {
+        let mat = Matrix::from_slice(3, 3, &[1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
+        let should_be = Matrix::from_slice(2, 1, &[2, 5]).unwrap();
+        let res = mat.sub_matrix(0, 2, 1, 2).unwrap();
+        assert_eq!(should_be, res);
+    }
+
+    #[test]
+    fn test_inverse() {
+        let mat = Matrix::from_slice(3, 3, &[56, 23, 98, 3, 100, 200, 45, 201, 123]).unwrap();
+        let expected =
+            Matrix::from_slice(3, 3, &[175, 133, 33, 130, 13, 245, 112, 35, 126]).unwrap();
+        assert_eq!(mat.inverse().unwrap(), expected);
     }
 }
