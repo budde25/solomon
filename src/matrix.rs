@@ -1,7 +1,5 @@
-use crate::galois::gal_multiply;
-
 use super::galois;
-use std::fmt::{self};
+use std::fmt;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum MatrixError {
@@ -145,7 +143,7 @@ impl Matrix {
                 if self[ra][d] != 0 {
                     let scale = self[ra][d];
                     for c in 0..self.cols {
-                        self[ra][c] ^= gal_multiply(scale, self[d][c]);
+                        self[ra][c] ^= galois::gal_multiply(scale, self[d][c]);
                     }
                 }
             }
@@ -177,16 +175,16 @@ impl Matrix {
             self.data[index2] = v1;
         }
     }
-}
 
-pub fn vandermonde(rows: usize, cols: usize) -> Result<Matrix, MatrixError> {
-    let mut res = Matrix::new(rows, cols)?;
-    for r in 0..rows {
-        for c in 0..cols {
-            res[r][c] = galois::gal_exp(r as u8, c)
+    pub fn vandermonde(rows: usize, cols: usize) -> Result<Self, MatrixError> {
+        let mut res = Self::new(rows, cols)?;
+        for r in 0..rows {
+            for c in 0..cols {
+                res[r][c] = galois::gal_exp(r as u8, c)
+            }
         }
+        Ok(res)
     }
-    Ok(res)
 }
 
 impl std::ops::Index<usize> for Matrix {
