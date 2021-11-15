@@ -10,7 +10,7 @@ pub enum MatrixError {
     Singular,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Matrix {
     data: Vec<u8>,
     cols: usize,

@@ -1,6 +1,7 @@
 mod galois;
 mod matrix;
 mod rs;
+mod inversion_tree;
 
 #[cfg(test)]
 mod tests {
