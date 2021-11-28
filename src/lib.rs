@@ -1,14 +1,18 @@
+mod consts;
 mod galois;
+mod inversion_tree;
 mod matrix;
 mod rs;
-mod inversion_tree;
 
 #[cfg(test)]
 mod tests {
     use crate::rs::ReedSolo;
 
     #[test]
-    fn it_works() {
-        let reedsolo = ReedSolo::new();
+    fn simple() {
+        let encoder = ReedSolo::new(4, 2).unwrap();
+        let data = b"Hello World!";
+        //let shards = encoder.split(data);
+        //encoder.encode(shards);
     }
 }
