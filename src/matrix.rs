@@ -76,8 +76,8 @@ impl Matrix {
     pub fn sub_matrix(
         &self,
         rmin: usize,
-        rmax: usize,
         cmin: usize,
+        rmax: usize,
         cmax: usize,
     ) -> Result<Self, MatrixError> {
         let mut res = Self::new(rmax - rmin, cmax - cmin)?;
@@ -323,7 +323,7 @@ mod tests {
     fn test_sub_matix() {
         let mat = Matrix::from_slice(3, 3, &[1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
         let should_be = Matrix::from_slice(2, 1, &[2, 5]).unwrap();
-        let res = mat.sub_matrix(0, 2, 1, 2).unwrap();
+        let res = mat.sub_matrix(0, 1, 2, 2).unwrap();
         assert_eq!(should_be, res);
     }
 
