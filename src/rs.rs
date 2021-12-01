@@ -1,6 +1,6 @@
 use crate::{
     galois,
-    matrix::{Matrix, MatrixError},
+    matrix::{self, Matrix, MatrixError},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,9 +18,11 @@ impl From<ReedSoloError> for EncoderError {
 }
 
 pub trait Encoder {
-    fn encode(&self, shards: &mut [&mut [u8]]) -> Result<(), EncoderError>;
-    fn verify(&self, shards: &[&[u8]]) -> Result<bool, EncoderError>;
+    fn encode(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError>;
+    fn reconstuct(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError>;
+    fn verify(&self, shards: &Vec<Vec<u8>>) -> Result<bool, EncoderError>;
     fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>, EncoderError>;
+    fn join(&self, shards: &Vec<Vec<u8>>, out_size: usize) -> Result<Vec<u8>, EncoderError>;
 }
 
 fn build_matrix(data_shards: usize, total_shards: usize) -> Result<Matrix, MatrixError> {
@@ -75,7 +77,7 @@ impl ReedSolo {
     fn code_some_shards(
         &self,
         matrix_rows: &[&[u8]],
-        inputs: &[&[u8]],
+        inputs: Vec<Vec<u8>>,
         mut outputs: Vec<Vec<u8>>,
         output_count: usize,
     ) -> Vec<Vec<u8>> {
@@ -88,19 +90,164 @@ impl ReedSolo {
 
         for _ in 0..inputs[0].len() {
             for c in 0..self.data_shards {
-                let input = inputs[c];
+                let input = inputs[c].clone();
                 for row in 0..output_count {
                     let out = outputs[row].as_mut();
                     if c == 0 {
-                        galois::gal_mul_slice(matrix_rows[row][c], input, out)
+                        galois::gal_mul_slice(matrix_rows[row][c], input.as_slice(), out)
                     } else {
-                        galois::gal_mul_slice_xor(matrix_rows[row][c], input, out)
+                        galois::gal_mul_slice_xor(matrix_rows[row][c], input.as_slice(), out)
                     }
                 }
             }
         }
 
         return outputs;
+    }
+
+    fn inner_reconstuct(
+        &self,
+        shards: &mut Vec<Vec<u8>>,
+        data_only: bool,
+    ) -> Result<(), EncoderError> {
+        if shards.len() != self.shards {
+            return Err(EncoderError::TooFewShards);
+        }
+
+        let shard_size = {
+            let no_mut: Vec<&[u8]> = shards.iter().map(|v| v.as_ref()).collect();
+            Self::check_shards(no_mut.as_slice())?;
+            Self::shard_size(no_mut.as_slice())
+        };
+
+        let mut number_present = 0;
+        let mut data_present = 0;
+        for i in 0..self.shards {
+            if shards[i].len() != 0 {
+                number_present += 1;
+                if i < self.data_shards {
+                    data_present += 1;
+                }
+            }
+        }
+
+        if number_present == self.shards || data_only && data_present == self.data_shards {
+            return Ok(());
+        }
+
+        if number_present < self.data_shards {
+            return Err(EncoderError::TooFewShards);
+        }
+
+        let mut sub_shards: Vec<Vec<u8>> = Vec::new();
+        let mut valid_indices: Vec<usize> = Vec::new();
+        for _ in 0..self.data_shards {
+            sub_shards.push(Vec::new());
+            valid_indices.push(0);
+        }
+
+        let mut invalid_indices: Vec<usize> = Vec::new();
+        let mut sub_matrix_row = 0;
+        for i in 0..self.data_shards {
+            if sub_matrix_row > i {
+                //break;
+            }
+
+            if shards[i].len() != 0 {
+                sub_shards[sub_matrix_row] = shards[i].clone();
+                valid_indices[sub_matrix_row] = i;
+                sub_matrix_row += 1;
+            } else {
+                invalid_indices.push(i);
+            }
+        }
+
+        let data_decode_matrix = {
+            let mut sub_matrix = Matrix::new(self.data_shards, self.data_shards).unwrap();
+            for r in 0..valid_indices.len() {
+                let v = valid_indices[r];
+                for c in 0..self.data_shards {
+                    sub_matrix[r][c] = self.matrix[r][c]; // TODOD FIXME replace self.matrix[r] with v
+                }
+            }
+            sub_matrix.inverse().unwrap()
+        };
+
+        let mut outputs = Vec::new();
+        let mut matrix_rows: Vec<Vec<u8>> = Vec::new();
+        for i in 0..self.data_shards {
+            outputs.push(Vec::with_capacity(self.data_shards));
+            matrix_rows.push(Vec::with_capacity(self.data_shards));
+            for _ in 0..self.data_shards {
+                outputs[i].push(0);
+            }
+        }
+        let mut output_count = 0;
+
+        for i_shard in 0..self.data_shards {
+            if shards[i_shard].len() == 0 {
+                outputs[output_count] = shards[i_shard].clone();
+
+                if outputs[output_count].len() == 0 {
+                    for _ in 0..self.data_shards {
+                        outputs[output_count].push(0);
+                    }
+                }
+
+                matrix_rows[output_count] = data_decode_matrix[i_shard].to_vec();
+                output_count += 1;
+            }
+        }
+
+        let output = outputs[0..output_count].to_vec();
+
+        let matrix_rows: Vec<&[u8]> = matrix_rows.iter().map(|f| f.as_slice()).collect();
+        self.code_some_shards(matrix_rows.as_slice(), sub_shards, outputs, output_count);
+
+        // todo mayber remove
+        dbg!(&output);
+        for i in self.data_shards..shards.len() {
+            shards[1] = output[0].clone(); //TODO FIX ME LMAO
+        }
+
+        if data_only {
+            return Ok(());
+        }
+
+        // TODO finish
+
+        Ok(())
+    }
+
+    fn check_some_shards(
+        &self,
+        matrix_rows: Vec<Vec<u8>>,
+        inputs: Vec<Vec<u8>>,
+        to_check: Vec<Vec<u8>>,
+        output_count: usize,
+        byte_count: usize,
+    ) -> bool {
+        if to_check.len() == 0 {
+            return true;
+        }
+        let mut outputs = Vec::with_capacity(to_check.len());
+        for i in 0..to_check.len() {
+            outputs.push(Vec::with_capacity(byte_count));
+            for _ in 0..byte_count {
+                outputs[i].push(0)
+            }
+        }
+
+        let mat_rows: Vec<&[u8]> = matrix_rows.iter().map(|v| v.as_slice()).collect();
+        let outputs = self.code_some_shards(mat_rows.as_slice(), inputs, outputs, output_count);
+
+        for i in 0..outputs.len() {
+            if outputs[i] != to_check[i] {
+                return false;
+            }
+        }
+
+        true
     }
 
     fn check_shards(shards: &[&[u8]]) -> Result<(), ReedSoloError> {
@@ -131,7 +278,7 @@ impl ReedSolo {
 }
 
 impl Encoder for ReedSolo {
-    fn encode(&self, shards: &mut [&mut [u8]]) -> Result<(), EncoderError> {
+    fn encode(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError> {
         if shards.len() != self.shards {
             return Err(EncoderError::TooFewShards);
         }
@@ -141,32 +288,43 @@ impl Encoder for ReedSolo {
             Self::check_shards(no_mut.as_slice())?;
         }
 
-        let inputs: Vec<&[u8]> = shards[0..self.data_shards]
-            .iter()
-            .map(|v| v.clone().as_ref())
-            .collect();
-        let output: Vec<Vec<u8>> = shards[self.data_shards..]
-            .iter()
-            .map(|v| v.to_vec())
-            .collect();
+        let inputs = shards[0..self.data_shards].to_vec();
+        let output: Vec<Vec<u8>> = shards[self.data_shards..].to_vec();
         let matrix_rows: Vec<&[u8]> = self.parity.iter().map(|v| v.as_slice()).collect();
 
-        let output = self.code_some_shards(
-            matrix_rows.as_slice(),
-            inputs.as_slice(),
-            output,
-            self.parity_shards,
-        );
+        let output =
+            self.code_some_shards(matrix_rows.as_slice(), inputs, output, self.parity_shards);
 
         for i in self.data_shards..shards.len() {
-            shards[i].copy_from_slice(output[i - self.shards].as_slice());
+            shards[i].copy_from_slice(output[i - self.data_shards].as_slice());
         }
 
         Ok(())
     }
 
-    fn verify(&self, shards: &[&[u8]]) -> Result<bool, EncoderError> {
-        todo!()
+    fn reconstuct(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError> {
+        self.inner_reconstuct(shards, false)
+    }
+
+    fn verify(&self, shards: &Vec<Vec<u8>>) -> Result<bool, EncoderError> {
+        if shards.len() != self.shards {
+            return Err(EncoderError::TooFewShards);
+        }
+
+        {
+            let no_mut: Vec<&[u8]> = shards.iter().map(|v| v.as_ref()).collect();
+            Self::check_shards(no_mut.as_slice())?;
+        }
+
+        let to_check = shards[self.data_shards..].to_vec();
+
+        Ok(self.check_some_shards(
+            self.parity.clone(),
+            shards[0..self.data_shards].to_vec(),
+            to_check,
+            self.parity_shards,
+            shards[0].len(),
+        ))
     }
 
     fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>, EncoderError> {
@@ -174,8 +332,48 @@ impl Encoder for ReedSolo {
             return Err(EncoderError::ShortData);
         }
 
+        let mut overall = Vec::with_capacity(self.shards);
+        let mut mutable = data.to_vec();
         let per_shard = (data.len() + self.data_shards - 1) / self.data_shards;
+        for _ in 1..self.data_shards {
+            let res = mutable.split_at(data.len() / self.data_shards);
+            overall.push(res.0.to_vec());
+            mutable = res.1.to_vec();
+        }
+        overall.push(mutable);
 
-        todo!();
+        for _ in 0..self.parity_shards {
+            let mut padding = Vec::with_capacity(per_shard);
+            for _ in 0..per_shard {
+                padding.push(0);
+            }
+            overall.push(padding);
+        }
+
+        Ok(overall)
+    }
+
+    fn join(&self, shards: &Vec<Vec<u8>>, out_size: usize) -> Result<Vec<u8>, EncoderError> {
+        if shards.len() < self.data_shards {
+            return Err(EncoderError::TooFewShards);
+        }
+        let new_shards = shards[0..self.data_shards].to_vec();
+        let mut size = 0;
+
+        for i in 0..new_shards.len() {
+            size += new_shards[i].len();
+
+            if size >= out_size {
+                break;
+            }
+        }
+
+        if size < out_size {
+            return Err(EncoderError::ShortData);
+        }
+
+        let ret = new_shards.into_iter().flatten().collect();
+
+        Ok(ret)
     }
 }
