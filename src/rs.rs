@@ -154,7 +154,7 @@ impl ReedSolo {
                 break;
             }
 
-            if shards[i].len() != 0 {
+            if !shards[i].is_empty() {
                 sub_shards[sub_matrix_row] = shards[i].clone();
                 valid_indices[sub_matrix_row] = i;
                 sub_matrix_row += 1;
@@ -183,12 +183,12 @@ impl ReedSolo {
         let mut output_count = 0;
 
         for i_shard in 0..self.data_shards {
-            if shards[i_shard].len() == 0 {
+            if shards[i_shard].is_empty() {
                 //shards[i_shard] = shards[i_shard][0..shard_size];
 
                 outputs[output_count] = shards[i_shard].clone();
 
-                if outputs[output_count].len() == 0 {
+                if outputs[output_count].is_empty() {
                     for _ in 0..shard_size {
                         outputs[output_count].push(0);
                     }
@@ -206,9 +206,9 @@ impl ReedSolo {
             self.code_some_shards(matrix_rows.as_slice(), sub_shards, output, output_count);
 
         let mut counter = 0;
-        for i in 0..self.data_shards {
-            if shards[i].len() == 0 {
-                shards[i] = output[counter].clone();
+        for shard in shards.iter_mut().take(self.data_shards) {
+            if shard.is_empty() {
+                *shard = output[counter].clone();
                 counter += 1;
             }
         }
@@ -230,7 +230,7 @@ impl ReedSolo {
         output_count: usize,
         byte_count: usize,
     ) -> bool {
-        if to_check.len() == 0 {
+        if to_check.is_empty() {
             return true;
         }
         let mut outputs = Vec::with_capacity(to_check.len());
@@ -261,7 +261,7 @@ impl ReedSolo {
 
         for shard in shards {
             if shard.len() != size {
-                if shard.len() != 0 {
+                if !shard.is_empty() {
                     return Err(ReedSoloError::InvalidShardSize);
                 }
             }
@@ -272,7 +272,7 @@ impl ReedSolo {
 
     fn shard_size(shards: &[&[u8]]) -> usize {
         for shard in shards {
-            if shard.len() != 0 {
+            if !shard.is_empty() {
                 return shard.len();
             }
         }
@@ -331,7 +331,7 @@ impl Encoder for ReedSolo {
     }
 
     fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>, EncoderError> {
-        if data.len() == 0 {
+        if data.is_empty() {
             return Err(EncoderError::ShortData);
         }
 
@@ -346,10 +346,7 @@ impl Encoder for ReedSolo {
         overall.push(mutable);
 
         for _ in 0..self.parity_shards {
-            let mut padding = Vec::with_capacity(per_shard);
-            for _ in 0..per_shard {
-                padding.push(0);
-            }
+            let padding = vec![0; per_shard];
             overall.push(padding);
         }
 
@@ -363,8 +360,8 @@ impl Encoder for ReedSolo {
         let new_shards = shards[0..self.data_shards].to_vec();
         let mut size = 0;
 
-        for i in 0..new_shards.len() {
-            size += new_shards[i].len();
+        for new_shard in &new_shards {
+            size += new_shard.len();
 
             if size >= out_size {
                 break;
