@@ -172,8 +172,6 @@ impl ReedSolo {
 
         for i_shard in 0..self.data_shards {
             if shards[i_shard].is_empty() {
-                //shards[i_shard] = shards[i_shard][0..shard_size];
-
                 outputs[output_count] = shards[i_shard].clone();
 
                 if outputs[output_count].is_empty() {
@@ -188,15 +186,9 @@ impl ReedSolo {
         }
 
         let mut output = outputs[0..output_count].to_vec();
-
         let matrix_rows: Vec<&[u8]> = matrix_rows.iter().map(|f| f.as_slice()).collect();
 
-        self.code_some_shards(
-            matrix_rows.as_slice(),
-            sub_shards,
-            &mut output,
-            output_count,
-        );
+        self.code_some_shards(&matrix_rows, sub_shards, &mut output, output_count);
 
         let mut counter = 0;
         for shard in shards.iter_mut().take(self.data_shards) {
@@ -210,7 +202,37 @@ impl ReedSolo {
             return Ok(());
         }
 
-        // TODO finish
+        let mut matrix_rows = matrix_rows;
+        let mut output_count = 0;
+        for i_shard in self.data_shards..self.shards {
+            if shards[i_shard].is_empty() {
+                outputs[output_count] = shards[i_shard].clone();
+
+                if outputs[output_count].is_empty() {
+                    for _ in 0..shard_size {
+                        outputs[output_count].push(0);
+                    }
+                }
+
+                matrix_rows[output_count] = self.parity[i_shard - self.data_shards].as_slice();
+                output_count += 1;
+            }
+        }
+        let mut output = outputs[0..output_count].to_vec();
+        let inputs = shards[0..self.data_shards].to_vec();
+        self.code_some_shards(&matrix_rows, inputs, &mut output, output_count);
+
+        let mut counter = 0;
+        for shard in shards
+            .iter_mut()
+            .skip(self.data_shards)
+            .take(self.parity_shards)
+        {
+            if shard.is_empty() {
+                *shard = output[counter].clone();
+                counter += 1;
+            }
+        }
 
         Ok(())
     }
@@ -370,5 +392,136 @@ impl Encoder for ReedSolo {
         let ret = new_shards.into_iter().flatten().collect();
 
         Ok(ret)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::rs::ReedSolo;
+    use crate::rs::{Encoder, EncoderError};
+
+    #[test]
+    fn test_delete_one_data_simple() {
+        // create an encoder object
+        let encoder = ReedSolo::new(4, 2).unwrap();
+        // data to encode
+        let data = b"Hello World!";
+
+        // data shards (could be written to files)
+        let mut shards = encoder.split(data).unwrap();
+        encoder.encode(&mut shards).unwrap();
+
+        // should be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), true);
+
+        shards[1] = Vec::new(); // delete middle data
+
+        // should no longer be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), false);
+
+        // reconstruct the data
+        encoder.reconstuct(&mut shards).unwrap();
+
+        // should now be valid once again
+        assert_eq!(encoder.verify(&shards).unwrap(), true);
+
+        // finally join in into a byte array
+        let res = encoder.join(&shards, 12).unwrap();
+
+        // ensure they are the same
+        assert_eq!("Hello World!".to_string(), String::from_utf8(res).unwrap());
+    }
+
+    #[test]
+    fn test_delete_two_data_simple() {
+        // create an encoder object
+        let encoder = ReedSolo::new(4, 2).unwrap();
+        // data to encode
+        let data = b"Hello World!";
+
+        // data shards (could be written to files)
+        let mut shards = encoder.split(data).unwrap();
+        encoder.encode(&mut shards).unwrap();
+
+        // should be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), true);
+
+        shards[1] = Vec::new(); // delete middle data
+        shards[2] = Vec::new(); // delete middle data
+
+        // should no longer be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), false);
+
+        // reconstruct the data
+        encoder.reconstuct(&mut shards).unwrap();
+
+        // should now be valid once again
+        assert_eq!(encoder.verify(&shards).unwrap(), true);
+
+        // finally join in into a byte array
+        let res = encoder.join(&shards, 12).unwrap();
+
+        // ensure they are the same
+        assert_eq!("Hello World!".to_string(), String::from_utf8(res).unwrap());
+    }
+
+    #[test]
+    fn test_delete_three_data_simple() {
+        // create an encoder object
+        let encoder = ReedSolo::new(4, 2).unwrap();
+        // data to encode
+        let data = b"Hello World!";
+
+        // data shards (could be written to files)
+        let mut shards = encoder.split(data).unwrap();
+        encoder.encode(&mut shards).unwrap();
+
+        // should be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), true);
+
+        shards[1] = Vec::new(); // delete middle data
+        shards[2] = Vec::new(); // delete middle data
+        shards[3] = Vec::new(); // delete middle data
+
+        // should no longer be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), false);
+
+        // should be impossible to reconstruct as we deleted too much data
+        assert_eq!(
+            encoder.reconstuct(&mut shards).unwrap_err(),
+            EncoderError::TooFewShards
+        );
+    }
+
+    #[test]
+    fn test_delete_one_parity_simple() {
+        // create an encoder object
+        let encoder = ReedSolo::new(4, 2).unwrap();
+        // data to encode
+        let data = b"Hello World!";
+
+        // data shards (could be written to files)
+        let mut shards = encoder.split(data).unwrap();
+        encoder.encode(&mut shards).unwrap();
+
+        // should be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), true);
+
+        shards[5] = Vec::new(); // delete parity data
+
+        // should no longer be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), false);
+
+        // reconstruct the data
+        encoder.reconstuct(&mut shards).unwrap();
+
+        // should now be valid once again
+        assert_eq!(encoder.verify(&shards).unwrap(), true);
+
+        // finally join in into a byte array
+        let res = encoder.join(&shards, 12).unwrap();
+
+        // ensure they are the same
+        assert_eq!("Hello World!".to_string(), String::from_utf8(res).unwrap());
     }
 }
