@@ -162,17 +162,13 @@ impl ReedSolo {
             sub_matrix.inverse().unwrap()
         };
 
-        let mut outputs = Vec::new();
-        let mut matrix_rows: Vec<Vec<u8>> = Vec::new();
-        for _ in 0..self.parity_shards {
-            outputs.push(Vec::new());
-            matrix_rows.push(Vec::new());
-        }
-        let mut output_count = 0;
+        let mut outputs = vec![Vec::new(); self.parity_shards];
+        let mut matrix_rows: Vec<Vec<u8>> = vec![Vec::new(); self.parity_shards];
 
-        for i_shard in 0..self.data_shards {
-            if shards[i_shard].is_empty() {
-                outputs[output_count] = shards[i_shard].clone();
+        let mut output_count = 0;
+        for (i_shard, shard) in shards.iter().enumerate().take(self.data_shards) {
+            if shard.is_empty() {
+                outputs[output_count] = shard.clone();
 
                 if outputs[output_count].is_empty() {
                     for _ in 0..shard_size {
@@ -204,9 +200,14 @@ impl ReedSolo {
 
         let mut matrix_rows = matrix_rows;
         let mut output_count = 0;
-        for i_shard in self.data_shards..self.shards {
-            if shards[i_shard].is_empty() {
-                outputs[output_count] = shards[i_shard].clone();
+        for (i_shard, shard) in shards
+            .iter()
+            .enumerate()
+            .take(self.shards)
+            .skip(self.data_shards)
+        {
+            if shard.is_empty() {
+                outputs[output_count] = shard.clone();
 
                 if outputs[output_count].is_empty() {
                     for _ in 0..shard_size {
