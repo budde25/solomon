@@ -78,19 +78,15 @@ impl ReedSolo {
         &self,
         matrix_rows: &[&[u8]],
         inputs: Vec<Vec<u8>>,
-        mut outputs: Vec<Vec<u8>>,
+        outputs: &mut Vec<Vec<u8>>,
         output_count: usize,
-    ) -> Vec<Vec<u8>> {
-        if outputs.len() == 0 {
-            return outputs;
+    ) {
+        if outputs.is_empty() {
+            return;
         }
 
-        //let mut start = 0;
-        //let end = outputs[0].len();
-
         for _ in 0..inputs[0].len() {
-            for c in 0..self.data_shards {
-                let input = inputs[c].clone();
+            for (c, input) in inputs.iter().enumerate().take(self.data_shards) {
                 for row in 0..output_count {
                     let out = outputs[row].as_mut();
                     if c == 0 {
@@ -98,12 +94,9 @@ impl ReedSolo {
                     } else {
                         galois::gal_mul_slice_xor(matrix_rows[row][c], input.as_slice(), out)
                     }
-                    outputs[row] = out.to_vec();
                 }
             }
         }
-
-        return outputs;
     }
 
     fn inner_reconstuct(
@@ -194,11 +187,16 @@ impl ReedSolo {
             }
         }
 
-        let output = outputs[0..output_count].to_vec();
+        let mut output = outputs[0..output_count].to_vec();
 
         let matrix_rows: Vec<&[u8]> = matrix_rows.iter().map(|f| f.as_slice()).collect();
-        let output =
-            self.code_some_shards(matrix_rows.as_slice(), sub_shards, output, output_count);
+
+        self.code_some_shards(
+            matrix_rows.as_slice(),
+            sub_shards,
+            &mut output,
+            output_count,
+        );
 
         let mut counter = 0;
         for shard in shards.iter_mut().take(self.data_shards) {
@@ -237,7 +235,7 @@ impl ReedSolo {
         }
 
         let mat_rows: Vec<&[u8]> = matrix_rows.iter().map(|v| v.as_slice()).collect();
-        let outputs = self.code_some_shards(mat_rows.as_slice(), inputs, outputs, output_count);
+        self.code_some_shards(mat_rows.as_slice(), inputs, &mut outputs, output_count);
 
         for i in 0..outputs.len() {
             if outputs[i] != to_check[i] {
@@ -287,11 +285,15 @@ impl Encoder for ReedSolo {
         }
 
         let inputs = shards[0..self.data_shards].to_vec();
-        let output: Vec<Vec<u8>> = shards[self.data_shards..].to_vec();
+        let mut output: Vec<Vec<u8>> = shards[self.data_shards..].to_vec();
         let matrix_rows: Vec<&[u8]> = self.parity.iter().map(|v| v.as_slice()).collect();
 
-        let output =
-            self.code_some_shards(matrix_rows.as_slice(), inputs, output, self.parity_shards);
+        self.code_some_shards(
+            matrix_rows.as_slice(),
+            inputs,
+            &mut output,
+            self.parity_shards,
+        );
 
         for i in self.data_shards..shards.len() {
             shards[i].copy_from_slice(output[i - self.data_shards].as_slice());
