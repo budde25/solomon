@@ -1,6 +1,6 @@
 use crate::{
     galois,
-    matrix::{self, Matrix, MatrixError},
+    matrix::{Matrix, MatrixError},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,12 +176,9 @@ impl ReedSolo {
 
         let mut outputs = Vec::new();
         let mut matrix_rows: Vec<Vec<u8>> = Vec::new();
-        for i in 0..self.parity_shards {
+        for _ in 0..self.parity_shards {
             outputs.push(Vec::new());
             matrix_rows.push(Vec::new());
-            //for _ in 0..self.data_shards {
-            //    outputs[i].push(0);
-            //}
         }
         let mut output_count = 0;
 

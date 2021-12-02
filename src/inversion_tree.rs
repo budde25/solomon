@@ -1,6 +1,7 @@
-use crate::matrix::{Matrix, MatrixError};
+use crate::matrix::Matrix;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(unused)]
 pub enum TreeError {
     AlreadySet,
     MatrixNotSquare,
@@ -17,6 +18,7 @@ struct InversionNode {
     children: Box<[Option<InversionNode>]>,
 }
 
+#[allow(unused)]
 impl InversionTree {
     fn new(data_shards: usize, parity_shards: usize) -> Self {
         let identity = Matrix::new_identity(data_shards).unwrap();
@@ -101,7 +103,7 @@ impl InversionNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::matrix::{self, Matrix};
+    use crate::matrix::Matrix;
 
     #[test]
     fn test_new() {

@@ -1,9 +1,11 @@
 use crate::consts::{EXP_TABLE, LOG_TABLE, MUL_TABLE};
 
+#[allow(unused)]
 pub fn gal_add(a: u8, b: u8) -> u8 {
     a ^ b
 }
 
+#[allow(unused)]
 pub fn gal_sub(a: u8, b: u8) -> u8 {
     a ^ b
 }
