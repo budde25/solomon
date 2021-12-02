@@ -123,8 +123,8 @@ impl ReedSolo {
 
         let mut number_present = 0;
         let mut data_present = 0;
-        for i in 0..self.shards {
-            if shards[i].len() != 0 {
+        for (i, shard) in shards.iter().enumerate().take(self.shards) {
+            if !shard.is_empty() {
                 number_present += 1;
                 if i < self.data_shards {
                     data_present += 1;
@@ -140,22 +140,17 @@ impl ReedSolo {
             return Err(EncoderError::TooFewShards);
         }
 
-        let mut sub_shards: Vec<Vec<u8>> = Vec::new();
-        let mut valid_indices: Vec<usize> = Vec::new();
-        for _ in 0..self.data_shards {
-            sub_shards.push(Vec::new());
-            valid_indices.push(0);
-        }
-
+        let mut sub_shards: Vec<Vec<u8>> = vec![Vec::new(); self.data_shards];
+        let mut valid_indices: Vec<usize> = vec![0; self.data_shards];
         let mut invalid_indices: Vec<usize> = Vec::new();
         let mut sub_matrix_row = 0;
-        for i in 0..self.shards {
+        for (i, shard) in shards.iter().enumerate().take(self.shards) {
             if sub_matrix_row >= self.data_shards {
                 break;
             }
 
-            if !shards[i].is_empty() {
-                sub_shards[sub_matrix_row] = shards[i].clone();
+            if !shard.is_empty() {
+                sub_shards[sub_matrix_row] = shard.clone();
                 valid_indices[sub_matrix_row] = i;
                 sub_matrix_row += 1;
             } else {
