@@ -98,6 +98,7 @@ impl ReedSolo {
                     } else {
                         galois::gal_mul_slice_xor(matrix_rows[row][c], input.as_slice(), out)
                     }
+                    outputs[row] = out.to_vec();
                 }
             }
         }
@@ -148,9 +149,9 @@ impl ReedSolo {
 
         let mut invalid_indices: Vec<usize> = Vec::new();
         let mut sub_matrix_row = 0;
-        for i in 0..self.data_shards {
-            if sub_matrix_row > i {
-                //break;
+        for i in 0..self.shards {
+            if sub_matrix_row >= self.data_shards {
+                break;
             }
 
             if shards[i].len() != 0 {
@@ -167,7 +168,7 @@ impl ReedSolo {
             for r in 0..valid_indices.len() {
                 let v = valid_indices[r];
                 for c in 0..self.data_shards {
-                    sub_matrix[r][c] = self.matrix[r][c]; // TODOD FIXME replace self.matrix[r] with v
+                    sub_matrix[r][c] = self.matrix[v][c];
                 }
             }
             sub_matrix.inverse().unwrap()
@@ -175,21 +176,23 @@ impl ReedSolo {
 
         let mut outputs = Vec::new();
         let mut matrix_rows: Vec<Vec<u8>> = Vec::new();
-        for i in 0..self.data_shards {
-            outputs.push(Vec::with_capacity(self.data_shards));
-            matrix_rows.push(Vec::with_capacity(self.data_shards));
-            for _ in 0..self.data_shards {
-                outputs[i].push(0);
-            }
+        for i in 0..self.parity_shards {
+            outputs.push(Vec::new());
+            matrix_rows.push(Vec::new());
+            //for _ in 0..self.data_shards {
+            //    outputs[i].push(0);
+            //}
         }
         let mut output_count = 0;
 
         for i_shard in 0..self.data_shards {
             if shards[i_shard].len() == 0 {
+                //shards[i_shard] = shards[i_shard][0..shard_size];
+
                 outputs[output_count] = shards[i_shard].clone();
 
                 if outputs[output_count].len() == 0 {
-                    for _ in 0..self.data_shards {
+                    for _ in 0..shard_size {
                         outputs[output_count].push(0);
                     }
                 }
@@ -202,12 +205,15 @@ impl ReedSolo {
         let output = outputs[0..output_count].to_vec();
 
         let matrix_rows: Vec<&[u8]> = matrix_rows.iter().map(|f| f.as_slice()).collect();
-        self.code_some_shards(matrix_rows.as_slice(), sub_shards, outputs, output_count);
+        let output =
+            self.code_some_shards(matrix_rows.as_slice(), sub_shards, output, output_count);
 
-        // todo mayber remove
-        dbg!(&output);
-        for i in self.data_shards..shards.len() {
-            shards[1] = output[0].clone(); //TODO FIX ME LMAO
+        let mut counter = 0;
+        for i in 0..self.data_shards {
+            if shards[i].len() == 0 {
+                shards[i] = output[counter].clone();
+                counter += 1;
+            }
         }
 
         if data_only {
