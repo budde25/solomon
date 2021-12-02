@@ -33,10 +33,10 @@ impl InversionTree {
 
     fn get(&self, invalid_indices: &[usize]) -> Option<Matrix> {
         let root = self.root.clone();
-        if invalid_indices.len() == 0 {
-            return Some(root.matrix);
+        if invalid_indices.is_empty() {
+            Some(root.matrix)
         } else {
-            return root.get(invalid_indices, 0);
+            root.get(invalid_indices, 0)
         }
     }
 
@@ -46,7 +46,7 @@ impl InversionTree {
         matrix: Matrix,
         shards: usize,
     ) -> Result<(), TreeError> {
-        if invalid_indices.len() == 0 {
+        if invalid_indices.is_empty() {
             return Err(TreeError::AlreadySet);
         }
 

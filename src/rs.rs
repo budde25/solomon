@@ -20,9 +20,9 @@ impl From<ReedSoloError> for EncoderError {
 pub trait Encoder {
     fn encode(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError>;
     fn reconstuct(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError>;
-    fn verify(&self, shards: &Vec<Vec<u8>>) -> Result<bool, EncoderError>;
+    fn verify(&self, shards: &[Vec<u8>]) -> Result<bool, EncoderError>;
     fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>, EncoderError>;
-    fn join(&self, shards: &Vec<Vec<u8>>, out_size: usize) -> Result<Vec<u8>, EncoderError>;
+    fn join(&self, shards: &[Vec<u8>], out_size: usize) -> Result<Vec<u8>, EncoderError>;
 }
 
 fn build_matrix(data_shards: usize, total_shards: usize) -> Result<Matrix, MatrixError> {
@@ -65,13 +65,13 @@ impl ReedSolo {
             parity.push(range.to_vec());
         }
 
-        return Ok(Self {
+        Ok(Self {
             parity_shards,
             data_shards,
             shards: parity_shards + data_shards,
             matrix,
             parity,
-        });
+        })
     }
 
     fn code_some_shards(
@@ -253,10 +253,8 @@ impl ReedSolo {
         }
 
         for shard in shards {
-            if shard.len() != size {
-                if !shard.is_empty() {
-                    return Err(ReedSoloError::InvalidShardSize);
-                }
+            if shard.len() != size && !shard.is_empty() {
+                return Err(ReedSoloError::InvalidShardSize);
             }
         }
 
@@ -306,7 +304,7 @@ impl Encoder for ReedSolo {
         self.inner_reconstuct(shards, false)
     }
 
-    fn verify(&self, shards: &Vec<Vec<u8>>) -> Result<bool, EncoderError> {
+    fn verify(&self, shards: &[Vec<u8>]) -> Result<bool, EncoderError> {
         if shards.len() != self.shards {
             return Err(EncoderError::TooFewShards);
         }
@@ -350,7 +348,7 @@ impl Encoder for ReedSolo {
         Ok(overall)
     }
 
-    fn join(&self, shards: &Vec<Vec<u8>>, out_size: usize) -> Result<Vec<u8>, EncoderError> {
+    fn join(&self, shards: &[Vec<u8>], out_size: usize) -> Result<Vec<u8>, EncoderError> {
         if shards.len() < self.data_shards {
             return Err(EncoderError::TooFewShards);
         }
