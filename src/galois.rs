@@ -61,7 +61,6 @@ pub fn gal_mul_slice(c: u8, input: &[u8], output: &mut [u8]) {
         return;
     }
 
-    // output = &mut output[0..input.len()];
     let mt = MUL_TABLE[c as usize];
     for n in 0..input.len() {
         output[n] = mt[input[n] as usize];
@@ -73,12 +72,10 @@ pub fn gal_mul_slice_xor(c: u8, input: &[u8], output: &mut [u8]) {
         for n in 0..input.len() {
             output[n] ^= input[n]
         }
-        return;
-    }
-
-    // output = &mut output[0..input.len()];
-    let mt = MUL_TABLE[c as usize];
-    for n in 0..input.len() {
-        output[n] ^= mt[input[n] as usize];
+    } else {
+        let mt = MUL_TABLE[c as usize];
+        for n in 0..input.len() {
+            output[n] ^= mt[input[n] as usize];
+        }
     }
 }

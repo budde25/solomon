@@ -525,4 +525,44 @@ mod tests {
         // ensure they are the same
         assert_eq!("Hello World!".to_string(), String::from_utf8(res).unwrap());
     }
+
+    #[test]
+    #[ignore = "takes long time"]
+    fn test_delete_two_data_long() {
+        use rand::prelude::*;
+
+        // create an encoder object
+        let encoder = ReedSolo::new(4, 2).unwrap();
+        // data to encode
+        let mut data = Vec::with_capacity(10_000);
+        for _ in 0..data.capacity() {
+            data.push(random());
+        }
+        let should_be = data.clone();
+
+        // data shards (could be written to files)
+        let mut shards = encoder.split(&data).unwrap();
+        encoder.encode(&mut shards).unwrap();
+
+        // should be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), true);
+
+        shards[0] = Vec::new(); // delete middle data
+        shards[2] = Vec::new(); // delete middle data
+
+        // should no longer be valid
+        assert_eq!(encoder.verify(&shards).unwrap(), false);
+
+        // reconstruct the data
+        encoder.reconstuct(&mut shards).unwrap();
+
+        // should now be valid once again
+        assert_eq!(encoder.verify(&shards).unwrap(), true);
+
+        // finally join in into a byte array
+        let res = encoder.join(&shards, 12).unwrap();
+
+        // ensure they are the same
+        assert_eq!(res, should_be);
+    }
 }
