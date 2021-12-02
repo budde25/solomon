@@ -18,8 +18,8 @@ impl From<ReedSoloError> for EncoderError {
 }
 
 pub trait Encoder {
-    fn encode(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError>;
-    fn reconstuct(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError>;
+    fn encode(&self, shards: &mut [Vec<u8>]) -> Result<(), EncoderError>;
+    fn reconstuct(&self, shards: &mut [Vec<u8>]) -> Result<(), EncoderError>;
     fn verify(&self, shards: &[Vec<u8>]) -> Result<bool, EncoderError>;
     fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>, EncoderError>;
     fn join(&self, shards: &[Vec<u8>], out_size: usize) -> Result<Vec<u8>, EncoderError>;
@@ -77,8 +77,8 @@ impl ReedSolo {
     fn code_some_shards(
         &self,
         matrix_rows: &[&[u8]],
-        inputs: Vec<Vec<u8>>,
-        outputs: &mut Vec<Vec<u8>>,
+        inputs: &[Vec<u8>],
+        outputs: &mut [Vec<u8>],
         output_count: usize,
     ) {
         if outputs.is_empty() {
@@ -101,7 +101,7 @@ impl ReedSolo {
 
     fn inner_reconstuct(
         &self,
-        shards: &mut Vec<Vec<u8>>,
+        shards: &mut [Vec<u8>],
         data_only: bool,
     ) -> Result<(), EncoderError> {
         if shards.len() != self.shards {
@@ -184,7 +184,7 @@ impl ReedSolo {
         let mut output = outputs[0..output_count].to_vec();
         let matrix_rows: Vec<&[u8]> = matrix_rows.iter().map(|f| f.as_slice()).collect();
 
-        self.code_some_shards(&matrix_rows, sub_shards, &mut output, output_count);
+        self.code_some_shards(&matrix_rows, &sub_shards, &mut output, output_count);
 
         let mut counter = 0;
         for shard in shards.iter_mut().take(self.data_shards) {
@@ -221,7 +221,7 @@ impl ReedSolo {
         }
         let mut output = outputs[0..output_count].to_vec();
         let inputs = shards[0..self.data_shards].to_vec();
-        self.code_some_shards(&matrix_rows, inputs, &mut output, output_count);
+        self.code_some_shards(&matrix_rows, &inputs, &mut output, output_count);
 
         let mut counter = 0;
         for shard in shards
@@ -240,9 +240,9 @@ impl ReedSolo {
 
     fn check_some_shards(
         &self,
-        matrix_rows: Vec<Vec<u8>>,
-        inputs: Vec<Vec<u8>>,
-        to_check: Vec<Vec<u8>>,
+        matrix_rows: &[Vec<u8>],
+        inputs: &[Vec<u8>],
+        to_check: &[Vec<u8>],
         output_count: usize,
         byte_count: usize,
     ) -> bool {
@@ -295,7 +295,7 @@ impl ReedSolo {
 }
 
 impl Encoder for ReedSolo {
-    fn encode(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError> {
+    fn encode(&self, shards: &mut [Vec<u8>]) -> Result<(), EncoderError> {
         if shards.len() != self.shards {
             return Err(EncoderError::TooFewShards);
         }
@@ -311,7 +311,7 @@ impl Encoder for ReedSolo {
 
         self.code_some_shards(
             matrix_rows.as_slice(),
-            inputs,
+            &inputs,
             &mut output,
             self.parity_shards,
         );
@@ -323,7 +323,7 @@ impl Encoder for ReedSolo {
         Ok(())
     }
 
-    fn reconstuct(&self, shards: &mut Vec<Vec<u8>>) -> Result<(), EncoderError> {
+    fn reconstuct(&self, shards: &mut [Vec<u8>]) -> Result<(), EncoderError> {
         self.inner_reconstuct(shards, false)
     }
 
@@ -340,9 +340,9 @@ impl Encoder for ReedSolo {
         let to_check = shards[self.data_shards..].to_vec();
 
         Ok(self.check_some_shards(
-            self.parity.clone(),
-            shards[0..self.data_shards].to_vec(),
-            to_check,
+            &self.parity,
+            &shards[0..self.data_shards],
+            &to_check,
             self.parity_shards,
             shards[0].len(),
         ))
