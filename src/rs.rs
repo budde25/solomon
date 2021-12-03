@@ -22,7 +22,7 @@ pub trait Encoder {
     fn reconstuct(&self, shards: &mut [Vec<u8>]) -> Result<(), EncoderError>;
     fn verify(&self, shards: &[Vec<u8>]) -> Result<bool, EncoderError>;
     fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>, EncoderError>;
-    fn join(&self, shards: &[Vec<u8>], out_size: usize) -> Result<Vec<u8>, EncoderError>;
+    fn join(&self, shards: &[Vec<u8>], out_size: Option<usize>) -> Result<Vec<u8>, EncoderError>;
 }
 
 fn build_matrix(data_shards: usize, total_shards: usize) -> Result<Matrix, MatrixError> {
@@ -371,7 +371,7 @@ impl Encoder for ReedSolo {
         Ok(overall)
     }
 
-    fn join(&self, shards: &[Vec<u8>], out_size: usize) -> Result<Vec<u8>, EncoderError> {
+    fn join(&self, shards: &[Vec<u8>], out_size: Option<usize>) -> Result<Vec<u8>, EncoderError> {
         if shards.len() < self.data_shards {
             return Err(EncoderError::TooFewShards);
         }
@@ -381,12 +381,12 @@ impl Encoder for ReedSolo {
         for new_shard in &new_shards {
             size += new_shard.len();
 
-            if size >= out_size {
+            if out_size.is_some() && size >= out_size.unwrap() {
                 break;
             }
         }
 
-        if size < out_size {
+        if out_size.is_some() && size < out_size.unwrap() {
             return Err(EncoderError::ShortData);
         }
 
@@ -427,7 +427,7 @@ mod tests {
         assert_eq!(encoder.verify(&shards).unwrap(), true);
 
         // finally join in into a byte array
-        let res = encoder.join(&shards, 12).unwrap();
+        let res = encoder.join(&shards, Some(12)).unwrap();
 
         // ensure they are the same
         assert_eq!("Hello World!".to_string(), String::from_utf8(res).unwrap());
@@ -460,7 +460,7 @@ mod tests {
         assert_eq!(encoder.verify(&shards).unwrap(), true);
 
         // finally join in into a byte array
-        let res = encoder.join(&shards, 12).unwrap();
+        let res = encoder.join(&shards, None).unwrap();
 
         // ensure they are the same
         assert_eq!("Hello World!".to_string(), String::from_utf8(res).unwrap());
@@ -520,7 +520,7 @@ mod tests {
         assert_eq!(encoder.verify(&shards).unwrap(), true);
 
         // finally join in into a byte array
-        let res = encoder.join(&shards, 12).unwrap();
+        let res = encoder.join(&shards, Some(12)).unwrap();
 
         // ensure they are the same
         assert_eq!("Hello World!".to_string(), String::from_utf8(res).unwrap());
@@ -560,7 +560,7 @@ mod tests {
         assert_eq!(encoder.verify(&shards).unwrap(), true);
 
         // finally join in into a byte array
-        let res = encoder.join(&shards, 12).unwrap();
+        let res = encoder.join(&shards, Some(12)).unwrap();
 
         // ensure they are the same
         assert_eq!(res, should_be);

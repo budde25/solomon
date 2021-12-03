@@ -32,7 +32,7 @@ mod tests {
         encoder.reconstuct(&mut shards).unwrap();
 
         // finally join in into a byte array
-        let res = encoder.join(&shards, 12).unwrap();
+        let res = encoder.join(&shards, Some(12)).unwrap();
 
         // ensure they are the same
         assert_eq!("Hello World!".to_string(), String::from_utf8(res).unwrap());
