@@ -18,7 +18,7 @@ pub struct Matrix {
 }
 
 impl Matrix {
-    // Create a new matix of zeros
+    // Create a new matrix of zeros
     pub fn new(rows: usize, cols: usize) -> Result<Self, MatrixError> {
         if rows < 1 {
             return Err(MatrixError::InvalidRowSize);

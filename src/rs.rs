@@ -1,31 +1,18 @@
 use crate::{
     galois,
     matrix::{Matrix, MatrixError},
+    Result, Error
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EncoderError {
-    TooFewShards,
-    ShortData,
-
-    ReedSolo(ReedSoloError),
-}
-
-impl From<ReedSoloError> for EncoderError {
-    fn from(e: ReedSoloError) -> Self {
-        Self::ReedSolo(e)
-    }
-}
-
 pub trait Encoder {
-    fn encode(&self, shards: &mut [Vec<u8>]) -> Result<(), EncoderError>;
-    fn reconstuct(&self, shards: &mut [Vec<u8>]) -> Result<(), EncoderError>;
-    fn verify(&self, shards: &[Vec<u8>]) -> Result<bool, EncoderError>;
-    fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>, EncoderError>;
-    fn join(&self, shards: &[Vec<u8>], out_size: Option<usize>) -> Result<Vec<u8>, EncoderError>;
+    fn encode(&self, shards: &mut [Vec<u8>]) -> Result<()>;
+    fn reconstruct(&self, shards: &mut [Vec<u8>]) -> Result<()>;
+    fn verify(&self, shards: &[Vec<u8>]) -> Result<bool>;
+    fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>>;
+    fn join(&self, shards: &[Vec<u8>], out_size: Option<usize>) -> Result<Vec<u8>>;
 }
 
-fn build_matrix(data_shards: usize, total_shards: usize) -> Result<Matrix, MatrixError> {
+fn build_matrix(data_shards: usize, total_shards: usize) -> std::result::Result<Matrix, MatrixError> {
     let vm = Matrix::vandermonde(total_shards, data_shards)?;
     let top = vm.sub_matrix(0, 0, data_shards, data_shards)?;
     let top_inv = top.inverse()?;
@@ -41,21 +28,14 @@ pub struct ReedSolo {
     parity: Vec<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReedSoloError {
-    InvalidShardNumber,
-    InvalidShardSize,
-    ShardNoData,
-}
-
 impl ReedSolo {
-    pub fn new(data_shards: usize, parity_shards: usize) -> Result<Self, ReedSoloError> {
+    pub fn new(data_shards: usize, parity_shards: usize) -> Result<Self> {
         if data_shards == 0 || parity_shards == 0 {
             //TODO allow zero parity shards
-            return Err(ReedSoloError::InvalidShardNumber);
+            return Err(Error::InvalidShardNumber);
         }
         if data_shards + parity_shards > 256 {
-            return Err(ReedSoloError::InvalidShardNumber);
+            return Err(Error::InvalidShardNumber);
         }
 
         let matrix = build_matrix(data_shards, data_shards + parity_shards).unwrap();
@@ -103,9 +83,9 @@ impl ReedSolo {
         &self,
         shards: &mut [Vec<u8>],
         data_only: bool,
-    ) -> Result<(), EncoderError> {
+    ) -> Result<()> {
         if shards.len() != self.shards {
-            return Err(EncoderError::TooFewShards);
+            return Err(Error::TooFewShards);
         }
 
         let shard_size = {
@@ -130,7 +110,7 @@ impl ReedSolo {
         }
 
         if number_present < self.data_shards {
-            return Err(EncoderError::TooFewShards);
+            return Err(Error::TooFewShards);
         }
 
         let mut sub_shards: Vec<Vec<u8>> = vec![Vec::new(); self.data_shards];
@@ -269,15 +249,15 @@ impl ReedSolo {
         true
     }
 
-    fn check_shards(shards: &[&[u8]]) -> Result<(), ReedSoloError> {
+    fn check_shards(shards: &[&[u8]]) -> Result<()> {
         let size = Self::shard_size(shards);
         if size == 0 {
-            return Err(ReedSoloError::ShardNoData);
+            return Err(Error::ShardNoData);
         }
 
         for shard in shards {
             if shard.len() != size && !shard.is_empty() {
-                return Err(ReedSoloError::InvalidShardSize);
+                return Err(Error::InvalidShardSize);
             }
         }
 
@@ -295,9 +275,9 @@ impl ReedSolo {
 }
 
 impl Encoder for ReedSolo {
-    fn encode(&self, shards: &mut [Vec<u8>]) -> Result<(), EncoderError> {
+    fn encode(&self, shards: &mut [Vec<u8>]) -> Result<()> {
         if shards.len() != self.shards {
-            return Err(EncoderError::TooFewShards);
+            return Err(Error::TooFewShards);
         }
 
         {
@@ -323,13 +303,13 @@ impl Encoder for ReedSolo {
         Ok(())
     }
 
-    fn reconstuct(&self, shards: &mut [Vec<u8>]) -> Result<(), EncoderError> {
+    fn reconstruct(&self, shards: &mut [Vec<u8>]) -> Result<()> {
         self.inner_reconstuct(shards, false)
     }
 
-    fn verify(&self, shards: &[Vec<u8>]) -> Result<bool, EncoderError> {
+    fn verify(&self, shards: &[Vec<u8>]) -> Result<bool> {
         if shards.len() != self.shards {
-            return Err(EncoderError::TooFewShards);
+            return Err(Error::TooFewShards);
         }
 
         {
@@ -348,9 +328,9 @@ impl Encoder for ReedSolo {
         ))
     }
 
-    fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>, EncoderError> {
+    fn split(&self, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         if data.is_empty() {
-            return Err(EncoderError::ShortData);
+            return Err(Error::ShortData);
         }
 
         let mut overall = Vec::with_capacity(self.shards);
@@ -371,9 +351,9 @@ impl Encoder for ReedSolo {
         Ok(overall)
     }
 
-    fn join(&self, shards: &[Vec<u8>], out_size: Option<usize>) -> Result<Vec<u8>, EncoderError> {
+    fn join(&self, shards: &[Vec<u8>], out_size: Option<usize>) -> Result<Vec<u8>> {
         if shards.len() < self.data_shards {
-            return Err(EncoderError::TooFewShards);
+            return Err(Error::TooFewShards);
         }
         let new_shards = shards[0..self.data_shards].to_vec();
         let mut size = 0;
@@ -387,7 +367,7 @@ impl Encoder for ReedSolo {
         }
 
         if out_size.is_some() && size < out_size.unwrap() {
-            return Err(EncoderError::ShortData);
+            return Err(Error::ShortData);
         }
 
         let ret = new_shards.into_iter().flatten().collect();
@@ -398,8 +378,10 @@ impl Encoder for ReedSolo {
 
 #[cfg(test)]
 mod tests {
+    use crate::Error;
     use crate::rs::ReedSolo;
-    use crate::rs::{Encoder, EncoderError};
+    use crate::rs::{Encoder};
+
 
     #[test]
     fn test_delete_one_data_simple() {
@@ -421,7 +403,7 @@ mod tests {
         assert_eq!(encoder.verify(&shards).unwrap(), false);
 
         // reconstruct the data
-        encoder.reconstuct(&mut shards).unwrap();
+        encoder.reconstruct(&mut shards).unwrap();
 
         // should now be valid once again
         assert_eq!(encoder.verify(&shards).unwrap(), true);
@@ -454,7 +436,7 @@ mod tests {
         assert_eq!(encoder.verify(&shards).unwrap(), false);
 
         // reconstruct the data
-        encoder.reconstuct(&mut shards).unwrap();
+        encoder.reconstruct(&mut shards).unwrap();
 
         // should now be valid once again
         assert_eq!(encoder.verify(&shards).unwrap(), true);
@@ -489,8 +471,8 @@ mod tests {
 
         // should be impossible to reconstruct as we deleted too much data
         assert_eq!(
-            encoder.reconstuct(&mut shards).unwrap_err(),
-            EncoderError::TooFewShards
+            encoder.reconstruct(&mut shards).unwrap_err(),
+            Error::TooFewShards
         );
     }
 
@@ -514,7 +496,7 @@ mod tests {
         assert_eq!(encoder.verify(&shards).unwrap(), false);
 
         // reconstruct the data
-        encoder.reconstuct(&mut shards).unwrap();
+        encoder.reconstruct(&mut shards).unwrap();
 
         // should now be valid once again
         assert_eq!(encoder.verify(&shards).unwrap(), true);
@@ -554,7 +536,7 @@ mod tests {
         assert_eq!(encoder.verify(&shards).unwrap(), false);
 
         // reconstruct the data
-        encoder.reconstuct(&mut shards).unwrap();
+        encoder.reconstruct(&mut shards).unwrap();
 
         // should now be valid once again
         assert_eq!(encoder.verify(&shards).unwrap(), true);

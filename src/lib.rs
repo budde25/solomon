@@ -2,7 +2,11 @@ mod consts;
 mod galois;
 mod inversion_tree;
 mod matrix;
-pub mod rs;
+mod rs;
+mod error;
+
+pub use rs::{Encoder, ReedSolo};
+pub use error::{Error, Result};
 
 #[cfg(test)]
 mod tests {
@@ -29,7 +33,7 @@ mod tests {
         assert_eq!(encoder.verify(&shards).unwrap(), false);
 
         // reconstruct the data
-        encoder.reconstuct(&mut shards).unwrap();
+        encoder.reconstruct(&mut shards).unwrap();
 
         // finally join in into a byte array
         let res = encoder.join(&shards, Some(12)).unwrap();
